@@ -10,6 +10,9 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.view.InputDevice;
 
+import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -31,11 +34,10 @@ public class SceManager {
 
         @Override
         public void onServiceDisconnected(ComponentName componentName) {
-            listenerId = 0;
-            tokenToDeviceIdMap.clear();
-            deviceIdToTokenMap.clear();
-
             binder = null;
+            listenerId = 0;
+
+            clearDeviceState();
         }
     };
 
@@ -46,6 +48,7 @@ public class SceManager {
     // of the two-way mapping present). This is fine for our purposes here.
     private final ConcurrentHashMap<String, Integer> tokenToDeviceIdMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, String> deviceIdToTokenMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Timer> activeRumbleTimerMap = new ConcurrentHashMap<>();
 
     private int listenerId;
     private final IExposedControllerManagerListener.Stub controllerListener = new IExposedControllerManagerListener.Stub() {
@@ -87,19 +90,16 @@ public class SceManager {
                 // NB: This can be called for a transition from a valid to invalid input device ID.
                 int newInputDeviceId = binder.getInputDeviceId(controllerToken);
                 if (changeType == 7) {
-                    deviceIdToTokenMap.remove(inputDeviceId);
-                    tokenToDeviceIdMap.remove(controllerToken);
-
                     if (newInputDeviceId >= 0) {
+                        deviceIdToTokenMap.remove(inputDeviceId);
+                        tokenToDeviceIdMap.remove(controllerToken);
                         deviceIdToTokenMap.put(newInputDeviceId, controllerToken);
                         tokenToDeviceIdMap.put(controllerToken, newInputDeviceId);
                     }
                     else {
                         // Treat transition to -1 as a device removal. We don't notify this case
                         // as a normal input device ID change.
-                        if (listener != null) {
-                            listener.onDeviceRemoved(inputDeviceId);
-                        }
+                        onDeviceRemoved(controllerToken);
                         return;
                     }
                 }
@@ -139,6 +139,12 @@ public class SceManager {
             Integer deviceId = tokenToDeviceIdMap.remove(controllerToken);
             if (deviceId != null) {
                 deviceIdToTokenMap.remove(deviceId);
+
+                Timer rumbleTimer = activeRumbleTimerMap.remove(controllerToken);
+                if (rumbleTimer != null) {
+                    rumbleTimer.cancel();
+                }
+
                 if (listener != null) {
                     listener.onDeviceRemoved(deviceId);
                 }
@@ -160,11 +166,49 @@ public class SceManager {
         return getControllerToken(device) != null;
     }
 
-    public boolean rumble(InputDevice device, int lowFreqMotor, int highFreqMotor) {
-        String controllerToken = getControllerToken(device);
+    public boolean rumble(InputDevice device, final int lowFreqMotor, final int highFreqMotor) {
+        final String controllerToken = getControllerToken(device);
         if (controllerToken != null) {
             try {
-                return binder.rumble(controllerToken, lowFreqMotor, highFreqMotor);
+                Timer existingTimer = activeRumbleTimerMap.remove(controllerToken);
+                if (existingTimer != null) {
+                    existingTimer.cancel();
+                }
+
+                if (binder.rumble(controllerToken, lowFreqMotor, highFreqMotor)) {
+                    // NVIDIA only supports rumble for 1 second at a time, so we keep a timer to continue
+                    // the rumbling until the caller explicitly stops it.
+                    if (lowFreqMotor != 0 || highFreqMotor != 0) {
+                        Timer timer = new Timer(true);
+                        activeRumbleTimerMap.put(controllerToken, timer);
+                        timer.schedule(new TimerTask() {
+                            @Override
+                            public void run() {
+                                // If this timer was removed, return without rumbling
+                                if (!activeRumbleTimerMap.containsKey(controllerToken)) {
+                                    return;
+                                }
+
+                                try {
+                                    // Continue to rumble as long as it succeeds
+                                    if (binder.rumble(controllerToken, lowFreqMotor, highFreqMotor)) {
+                                        return;
+                                    }
+                                } catch (RemoteException e) {
+                                    e.printStackTrace();
+                                }
+
+                                // If we made it here, the rumble failed so cancel our timer.
+                                Timer timer = activeRumbleTimerMap.remove(controllerToken);
+                                if (timer != null) {
+                                    timer.cancel();
+                                }
+                            }
+                        }, 500, 500);
+                    }
+
+                    return true;
+                }
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
@@ -274,9 +318,28 @@ public class SceManager {
         }
     }
 
-    public void stop() {
+    private void clearDeviceState() {
         tokenToDeviceIdMap.clear();
         deviceIdToTokenMap.clear();
+
+        for (Map.Entry<String, Timer> entry : activeRumbleTimerMap.entrySet()) {
+            // Stop the repeating timer
+            entry.getValue().cancel();
+
+            // If our binder is still alive, send the rumble stop command
+            if (binder != null) {
+                try {
+                    binder.rumble(entry.getKey(), 0, 0);
+                } catch (RemoteException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        activeRumbleTimerMap.clear();
+    }
+
+    public void stop() {
+        clearDeviceState();
 
         if (listenerId != 0) {
             try {
