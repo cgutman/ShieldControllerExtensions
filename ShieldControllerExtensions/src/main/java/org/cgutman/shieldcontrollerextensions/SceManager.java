@@ -5,7 +5,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.hardware.input.InputManager;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.view.InputDevice;
@@ -14,7 +13,6 @@ import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SceManager {
     private final Context context;
@@ -154,18 +152,38 @@ public class SceManager {
 
     private SceDeviceListener listener;
 
+    /**
+     * Constructor for SceManager
+     * @param context Context
+     */
     public SceManager(Context context) {
         this.context = context;
     }
 
+    /**
+     * Sets or clears the optional device listener callbacks
+     * @param listener Valid listener or null to clear
+     */
     public void setDeviceListener(SceDeviceListener listener) {
         this.listener = listener;
     }
 
+    /**
+     * Determines if a given InputDevice can be used with SceManager APIs
+     * @param device Input device to examine
+     * @return true if the device is compatible with SceManager APIs, false otherwise
+     */
     public boolean isRecognizedDevice(InputDevice device) {
         return getControllerToken(device) != null;
     }
 
+    /**
+     * Plays a rumble effect on the given InputDevice
+     * @param device Input device to rumble
+     * @param lowFreqMotor Value of the low frequency motor (0 - 65535)
+     * @param highFreqMotor Value of the high frequency motor (0 - 65535)
+     * @return true on success, false on failure
+     */
     public boolean rumble(InputDevice device, final int lowFreqMotor, final int highFreqMotor) {
         final String controllerToken = getControllerToken(device);
         if (controllerToken != null) {
@@ -216,6 +234,11 @@ public class SceManager {
         return false;
     }
 
+    /**
+     * Gets the category (remote vs controller) of an InputDevice
+     * @param device Input device to query
+     * @return SceCategory
+     */
     public SceCategory getCategory(InputDevice device) {
         String controllerToken = getControllerToken(device);
         if (controllerToken != null) {
@@ -228,6 +251,11 @@ public class SceManager {
         return SceCategory.UNKNOWN;
     }
 
+    /**
+     * Gets the battery percentage of an InputDevice
+     * @param device Input device to query
+     * @return 0-100 or -1 on failure
+     */
     public int getBatteryPercentage(InputDevice device) {
         String controllerToken = getControllerToken(device);
         if (controllerToken != null) {
@@ -240,6 +268,11 @@ public class SceManager {
         return -1;
     }
 
+    /**
+     * Gets the current charging state (charging vs not charging) of an InputDevice
+     * @param device Input device to query
+     * @return SceChargingState
+     */
     public SceChargingState getChargingState(InputDevice device) {
         String controllerToken = getControllerToken(device);
         if (controllerToken != null) {
@@ -252,6 +285,11 @@ public class SceManager {
         return SceChargingState.UNKNOWN;
     }
 
+    /**
+     * Gets the current connection state (connected vs disconnected) of an InputDevice
+     * @param device Input device to query
+     * @return SceConnectionState
+     */
     public SceConnectionState getConnectionState(InputDevice device) {
         String controllerToken = getControllerToken(device);
         if (controllerToken != null) {
@@ -264,6 +302,11 @@ public class SceManager {
         return SceConnectionState.UNKNOWN;
     }
 
+    /**
+     * Gets the current connection type (wired vs wireless) of an InputDevice
+     * @param device Input device to query
+     * @return SceConnectionType
+     */
     public SceConnectionType getConnectionType(InputDevice device) {
         String controllerToken = getControllerToken(device);
         if (controllerToken != null) {
@@ -276,6 +319,11 @@ public class SceManager {
         return SceConnectionType.UNKNOWN;
     }
 
+    /**
+     * Plays a haptic effect or other form of identification for an InputDevice
+     * @param device Input device to identify
+     * @return true on success, false otherwise
+     */
     public boolean identify(InputDevice device) {
         String controllerToken = getControllerToken(device);
         if (controllerToken != null) {
@@ -288,6 +336,11 @@ public class SceManager {
         return false;
     }
 
+    /**
+     * Queries if an InputDevice has a headset plugged in
+     * @param device Input device to query
+     * @return true if a headset is present, false otherwise
+     */
     public boolean hasHeadset(InputDevice device) {
         String controllerToken = getControllerToken(device);
         if (controllerToken != null) {
@@ -300,6 +353,16 @@ public class SceManager {
         return false;
     }
 
+    /**
+     * Starts the SceManager. This must be called before functions other than setListener().
+     *
+     * Note: Starting is an asynchronous operation. It may not be possible to interact with
+     * SceManager APIs until SceManager has bound to the SHIELD AccessoryService.
+     *
+     * If this function returns true, stop() must be called when you're finished.
+     *
+     * @return true if the SHIELD AccessoryService was available, false otherwise
+     */
     public boolean start() {
         Intent intent = new Intent();
         intent.setClassName("com.nvidia.blakepairing", "com.nvidia.blakepairing.AccessoryService");
@@ -338,6 +401,9 @@ public class SceManager {
         activeRumbleTimerMap.clear();
     }
 
+    /**
+     * Stops the SceManager. No further listener callbacks will be invoked.
+     */
     public void stop() {
         clearDeviceState();
 
