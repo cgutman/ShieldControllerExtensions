@@ -78,7 +78,7 @@ public class SceManager {
                 if (inputDeviceId == null) {
                     // If this is an input device changed, we will treat this as a device added
                     // when we're gaining an input device ID for the first time.
-                    if (changeType == 7 && binder.getInputDeviceId(controllerToken) > 0) {
+                    if (changeType == 7 && binder.getInputDeviceId(controllerToken) >= 0) {
                         onDeviceAdded(controllerToken);
                     }
                     return;
