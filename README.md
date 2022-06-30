@@ -4,6 +4,28 @@ This Android library enables access to rumble and other special functionality on
 
 This is required because the NVIDIA Shield Controller does not work with the standard APIs such as `getVibrator()`, `getVibrationManager()`, `getBatteryState()`, etc.
 
+[![](https://jitpack.io/v/cgutman/ShieldControllerExtensions.svg)](https://jitpack.io/#cgutman/ShieldControllerExtensions)
+
+# Getting the library
+
+The ShieldControllerExtensions library is hosted using [JitPack](https://jitpack.io/).
+
+To use it, simply add the JitPack repository to your root build.gradle file:
+```gradle
+    allprojects {
+        repositories {
+            maven { url 'https://jitpack.io' }
+        }
+    }
+```
+
+then add a dependency on the library itself in your app's build.gradle file:
+```gradle
+    dependencies {
+        implementation 'com.github.cgutman:ShieldControllerExtensions:1.0'
+    }
+```
+
 # Usage
 
 The SceManager class provides the primary interface to the library. It is designed to easily integrate with existing `KeyEvent` and `MotionEvent` processing code because it works exclusively with `InputDevice` references which are easily obtained from such events.
