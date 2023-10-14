@@ -155,8 +155,16 @@ class IExposedControllerBinderWrapper {
 
             output.readException();
 
-            String[] batteryState = output.readString().split(";");
-            return Integer.parseInt(batteryState[0]);
+            String batteryState = output.readString();
+            if (batteryState != null && !batteryState.isEmpty()) {
+                try {
+                    return Integer.parseInt(batteryState.split(";")[0]);
+                } catch (NumberFormatException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            return -1;
         } finally {
             input.recycle();
             output.recycle();
