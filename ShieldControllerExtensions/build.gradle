@@ -49,7 +49,7 @@ publishing {
             version = "1.0"
 
             afterEvaluate {
-                from(components["release"])
+                from components.release
             }
         }
     }
